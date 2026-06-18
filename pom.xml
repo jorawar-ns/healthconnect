@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.healthconnect</groupId>
+    <artifactId>healthconnect-parent</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <name>HealthConnect Parent</name>
+    <description>Optum-like healthcare network platform — multi-module parent</description>
+
+    <modules>
+        <module>healthconnect-common</module>
+        <module>discovery-server</module>
+        <module>api-gateway</module>
+        <module>auth-service</module>
+        <module>eligibility-service</module>
+        <module>payer-service</module>
+        <module>claims-service</module>
+        <module>authorization-service</module>
+        <module>era-service</module>
+        <module>document-service</module>
+        <module>notification-service</module>
+    </modules>
+
+    <properties>
+        <!--
+            Java 8 — the company standard when the project started in 2021.
+            An upgrade to Java 11 was on the 2023 roadmap but never cleared
+            security review before this codebase was written.
+            Spring Boot 2.6.x supports Java 8+ so no conflict.
+            Spring Boot 3.x was NOT approved — it requires Java 17 minimum
+            and forces a javax -> jakarta namespace migration across the
+            entire multi-million-line codebase (HCEP-3001, deferred).
+        -->
+        <java.version>1.8</java.version>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!--
+            Spring Boot 2.6.x — the version the team was on during 2021-2023.
+            Migration to 2.7.x was approved in late 2023 but rolled out slowly.
+        -->
+        <spring-boot.version>2.6.13</spring-boot.version>
+        <!-- Spring Cloud 2021.0.x (Jubilee) — compatible with Boot 2.6 -->
+        <spring-cloud.version>2021.0.5</spring-cloud.version>
+        <!--
+            jjwt 0.9.1 — the version locked in since 2019.
+            The 0.11+ API is a complete rewrite; upgrading requires changing
+            every caller. Backlog ticket exists, not yet prioritised.
+        -->
+        <jjwt.version>0.9.1</jjwt.version>
+        <mapstruct.version>1.4.2.Final</mapstruct.version>
+        <!-- Flyway 8.x — 9+ dropped support for older Postgres JDBC drivers -->
+        <flyway.version>8.5.13</flyway.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Spring Boot BOM -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- Spring Cloud BOM -->
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- Internal common library -->
+            <dependency>
+                <groupId>com.healthconnect</groupId>
+                <artifactId>healthconnect-common</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <!-- JWT — 0.9.1 single-jar, no split api/impl/jackson -->
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <!-- MapStruct -->
+            <dependency>
+                <groupId>org.mapstruct</groupId>
+                <artifactId>mapstruct</artifactId>
+                <version>${mapstruct.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.mapstruct</groupId>
+                <artifactId>mapstruct-processor</artifactId>
+                <version>${mapstruct.version}</version>
+            </dependency>
+            <!-- Flyway 8.x — flyway-database-postgresql split artifact didn't exist yet -->
+            <dependency>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-core</artifactId>
+                <version>${flyway.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!-- Common deps inherited by ALL child modules -->
+    <dependencies>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>${spring-boot.version}</version>
+                    <configuration>
+                        <excludes>
+                            <exclude>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                            </exclude>
+                        </excludes>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.8.1</version><!-- 3.8.1 — standard for Java 8 projects in 2021 era -->
+                    <configuration>
+                        <source>1.8</source>
+                        <target>1.8</target>
+                        <annotationProcessorPaths>
+                            <path>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                            </path>
+                            <path>
+                                <groupId>org.mapstruct</groupId>
+                                <artifactId>mapstruct-processor</artifactId>
+                                <version>${mapstruct.version}</version>
+                            </path>
+                        </annotationProcessorPaths>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
+</project>

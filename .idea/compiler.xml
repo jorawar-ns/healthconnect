@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CompilerConfiguration">
+    <annotationProcessing>
+      <profile name="Maven default annotation processors profile" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <module name="auth-service" />
+        <module name="discovery-server" />
+        <module name="api-gateway" />
+        <module name="healthconnect-common" />
+        <module name="era-service" />
+        <module name="authorization-service" />
+        <module name="claims-service" />
+        <module name="payer-service" />
+        <module name="eligibility-service" />
+        <module name="notification-service" />
+        <module name="document-service" />
+      </profile>
+    </annotationProcessing>
+  </component>
+</project>

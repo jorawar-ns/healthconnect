@@ -1,0 +1,342 @@
+version: "3.9"
+
+# ════════════════════════════════════════════════════════════════════════════
+#  HealthConnect — Local Development Stack
+#  Start order:  infra → discovery → gateway → services
+#  Usage:        docker-compose up -d
+# ════════════════════════════════════════════════════════════════════════════
+
+x-common-env: &common-env
+  EUREKA_HOST: discovery-server
+  EUREKA_USER: eureka
+  EUREKA_PASSWORD: eureka-secret
+  JWT_SECRET: healthconnect-super-secret-key-change-in-production-min-256-bits
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  networks:
+    - healthconnect-net
+  depends_on:
+    discovery-server:
+      condition: service_healthy
+
+services:
+
+  # ── Infrastructure ─────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:13-alpine
+    container_name: hc-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: healthconnect
+      POSTGRES_PASSWORD: healthconnect
+      POSTGRES_MULTIPLE_DATABASES: >
+        healthconnect_auth,healthconnect_eligibility,healthconnect_payer,
+        healthconnect_claims,healthconnect_authorization,healthconnect_era,
+        healthconnect_document
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init-multiple-dbs.sh:/docker-entrypoint-initdb.d/init-multiple-dbs.sh:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - healthconnect-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U healthconnect"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:6-alpine
+    container_name: hc-redis
+    restart: unless-stopped
+    command: redis-server --requirepass redissecret --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    networks:
+      - healthconnect-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redissecret", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:6.2.1
+    container_name: hc-zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - healthconnect-net
+
+  kafka:
+    image: confluentinc/cp-kafka:6.2.1
+    container_name: hc-kafka
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - healthconnect-net
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "kafka:29092", "--list"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: hc-kafka-ui
+    restart: unless-stopped
+    depends_on:
+      - kafka
+    ports:
+      - "9093:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: healthconnect
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    networks:
+      - healthconnect-net
+
+  # ── Service Discovery ──────────────────────────────────────────────────────
+
+  discovery-server:
+    build:
+      context: .
+      dockerfile: discovery-server/Dockerfile
+    container_name: hc-discovery
+    restart: unless-stopped
+    ports:
+      - "8761:8761"
+    environment:
+      EUREKA_USER: eureka
+      EUREKA_PASSWORD: eureka-secret
+    networks:
+      - healthconnect-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8761/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+
+  # ── API Gateway ────────────────────────────────────────────────────────────
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: hc-gateway
+    <<: *service-defaults
+    ports:
+      - "8080:8080"
+    environment:
+      <<: *common-env
+
+  # ── Auth Service ───────────────────────────────────────────────────────────
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    container_name: hc-auth
+    <<: *service-defaults
+    ports:
+      - "8081:8081"
+    environment:
+      <<: *common-env
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: healthconnect_auth
+      DB_USER: healthconnect
+      DB_PASSWORD: healthconnect
+    depends_on:
+      postgres:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+
+  # ── Eligibility Service ────────────────────────────────────────────────────
+
+  eligibility-service:
+    build:
+      context: .
+      dockerfile: eligibility-service/Dockerfile
+    container_name: hc-eligibility
+    <<: *service-defaults
+    ports:
+      - "8082:8082"
+    environment:
+      <<: *common-env
+      DB_HOST: postgres
+      DB_NAME: healthconnect_eligibility
+      DB_USER: healthconnect
+      DB_PASSWORD: healthconnect
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+
+  # ── Payer Service (Sprint 3 — Jorawar) ────────────────────────────────────
+
+  payer-service:
+    build:
+      context: .
+      dockerfile: payer-service/Dockerfile
+    container_name: hc-payer
+    <<: *service-defaults
+    ports:
+      - "8083:8083"
+    environment:
+      <<: *common-env
+      DB_HOST: postgres
+      DB_NAME: healthconnect_payer
+      DB_USER: healthconnect
+      DB_PASSWORD: healthconnect
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+
+  # ── Claims Service ─────────────────────────────────────────────────────────
+
+  claims-service:
+    build:
+      context: .
+      dockerfile: claims-service/Dockerfile
+    container_name: hc-claims
+    <<: *service-defaults
+    ports:
+      - "8084:8084"
+    environment:
+      <<: *common-env
+      DB_HOST: postgres
+      DB_NAME: healthconnect_claims
+      DB_USER: healthconnect
+      DB_PASSWORD: healthconnect
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+
+  # ── Authorization Service ──────────────────────────────────────────────────
+
+  authorization-service:
+    build:
+      context: .
+      dockerfile: authorization-service/Dockerfile
+    container_name: hc-authorization
+    <<: *service-defaults
+    ports:
+      - "8085:8085"
+    environment:
+      <<: *common-env
+      DB_HOST: postgres
+      DB_NAME: healthconnect_authorization
+      DB_USER: healthconnect
+      DB_PASSWORD: healthconnect
+    depends_on:
+      postgres:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+
+  # ── ERA Service ────────────────────────────────────────────────────────────
+
+  era-service:
+    build:
+      context: .
+      dockerfile: era-service/Dockerfile
+    container_name: hc-era
+    <<: *service-defaults
+    ports:
+      - "8086:8086"
+    environment:
+      <<: *common-env
+      DB_HOST: postgres
+      DB_NAME: healthconnect_era
+      DB_USER: healthconnect
+      DB_PASSWORD: healthconnect
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+
+  # ── Document Service ───────────────────────────────────────────────────────
+
+  document-service:
+    build:
+      context: .
+      dockerfile: document-service/Dockerfile
+    container_name: hc-document
+    <<: *service-defaults
+    ports:
+      - "8087:8087"
+    environment:
+      <<: *common-env
+      DB_HOST: postgres
+      DB_NAME: healthconnect_document
+      DB_USER: healthconnect
+      DB_PASSWORD: healthconnect
+      AWS_REGION: ${AWS_REGION:-ca-central-1}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-healthconnect-documents-local}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+
+  # ── Notification Service ───────────────────────────────────────────────────
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    container_name: hc-notification
+    <<: *service-defaults
+    ports:
+      - "8088:8088"
+    environment:
+      <<: *common-env
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+
+# ── Networks & Volumes ─────────────────────────────────────────────────────
+
+networks:
+  healthconnect-net:
+    driver: bridge
+
+volumes:
+  postgres-data:

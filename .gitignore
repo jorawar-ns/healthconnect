@@ -1,0 +1,48 @@
+
+# ── Spring Boot config (sensitive) ──────────────────────────────────────────
+application.yml
+application.properties
+
+# ── Maven build output ───────────────────────────────────────────────────────
+target/
+*.jar
+*.war
+*.ear
+*.class
+
+# ── Environment / secrets ────────────────────────────────────────────────────
+.env
+*.env
+!.env.example
+
+# ── IntelliJ IDEA (user-specific files) ─────────────────────────────────────
+*.iml
+*.ipr
+*.iws
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/usage.statistics.xml
+.idea/dictionaries/
+.idea/shelf/
+
+# ── Eclipse ──────────────────────────────────────────────────────────────────
+.classpath
+.project
+.settings/
+bin/
+
+# ── VS Code ──────────────────────────────────────────────────────────────────
+.vscode/
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── OS files ─────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Docker local overrides ───────────────────────────────────────────────────
+docker-compose.override.yml
+docker-compose.local.yml
