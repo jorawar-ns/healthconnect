@@ -1,4 +1,4 @@
--- V1 : Payer Service schema
+-- V1 : com.healthconnect.payer.entity.Payer Service schema
 -- NOTE: Full schema implemented in Sprint 3 by Jorawar Singh
 -- This migration creates the table structure matching payerListV1 OpenAPI spec
 

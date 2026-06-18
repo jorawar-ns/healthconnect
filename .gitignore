@@ -14,6 +14,7 @@ target/
 .env
 *.env
 !.env.example
+.env.*
 
 # ── IntelliJ IDEA (user-specific files) ─────────────────────────────────────
 *.iml
