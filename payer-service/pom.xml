@@ -13,7 +13,7 @@
     </parent>
 
     <artifactId>payer-service</artifactId>
-    <name>HealthConnect Payer Service</name>
+    <name>HealthConnect com.healthconnect.payer.entity.Payer Service</name>
 
     <dependencies>
         <dependency>
