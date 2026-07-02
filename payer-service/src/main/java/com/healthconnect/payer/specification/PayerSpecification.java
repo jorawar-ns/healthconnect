@@ -14,7 +14,7 @@ public class PayerSpecification {
         return ((root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            if(criteria.getPayerPlanName() != null){
+            if(criteria.getPayerPlanName() != null && criteria.getPayerPlanName().trim().isEmpty()){
                 predicates.add(
                         cb.like(
                                 cb.lower(root.get("payerPlanName")),
